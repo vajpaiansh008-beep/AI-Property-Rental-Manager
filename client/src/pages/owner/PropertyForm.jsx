@@ -1,4 +1,4 @@
-import { FiHome, FiMapPin, FiTag, FiImage, FiX } from "react-icons/fi";
+import { FiHome, FiMapPin, FiTag, FiImage, FiX, FiZap } from "react-icons/fi";
 
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
@@ -27,10 +27,12 @@ const PropertyForm = () => {
   const [existingImages, setExistingImages] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [generating, setGenerating] = useState(false);
+
   useEffect(() => {
     api
       .get("/categories/all-categories")
-      .then((res) => setCategories(res.data.category))
+      .then((res) => setCategories(res.data.category || []))
       .catch((error) => console.log(error));
   }, []);
 
@@ -41,16 +43,15 @@ const PropertyForm = () => {
       try {
         const res = await api.get(`/properties/get-property/${id}`);
         const p = res.data.property;
-
         setFormData({
-          title: p.title,
-          categoryId: p.categoryId?._id || "",
-          location: p.location,
-          price: p.price,
-          bedrooms: p.bedRooms,
-          bathrooms: p.bathRooms,
-          area: p.area,
-          description: p.description,
+          title: p.title || "",
+          categoryId: p.categoryId?._id || p.categoryId || "",
+          location: p.location || "",
+          price: p.price ?? "",
+          bedRooms: p.bedRooms ?? "",
+          bathRooms: p.bathRooms ?? "",
+          area: p.area ?? "",
+          description: p.description || "",
         });
         setExistingImages(p.images || []);
       } catch (error) {
@@ -79,6 +80,54 @@ const PropertyForm = () => {
 
   const removeNewImage = (index) => {
     setNewImages((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const generateDescription = async () => {
+    const { title, location, bedRooms, bathRooms, area, price, categoryId } =
+      formData;
+
+    if (
+      !title ||
+      !location ||
+      !bedRooms ||
+      !bathRooms ||
+      !area ||
+      !price ||
+      !categoryId
+    ) {
+      toast.error(
+        "Fill title, category, location, price, bedrooms, bathrooms and area first",
+      );
+      return;
+    }
+
+    const category = categories.find((c) => c._id === categoryId);
+
+    try {
+      setGenerating(true);
+
+      const res = await api.post("/ai/generate-description", {
+        title,
+        location,
+        bedRooms,
+        bathRooms,
+        area,
+        price,
+        categoryName: category?.categoryName,
+      });
+
+      setFormData((prev) => ({
+        ...prev,
+        description: res.data.description || "",
+      }));
+      toast.success("Description generated");
+    } catch (error) {
+      toast.error(
+        error.response?.data?.msg || "Failed to generate description",
+      );
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const submitHandler = async (e) => {
@@ -118,7 +167,7 @@ const PropertyForm = () => {
           {isEditMode ? "Edit Property" : "Add Property"}
         </h1>
         <p className="mt-1 text-sm text-slate-400">
-          Fill in the details below to
+          Fill in the details below to{" "}
           {isEditMode ? "update your" : "list a new"} property.
         </p>
 
@@ -244,9 +293,20 @@ const PropertyForm = () => {
 
           {/* Description */}
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-300">
-              Description
-            </label>
+            <div className="mb-2 flex items-center justify-between">
+              <label className="block text-sm font-medium text-slate-300">
+                Description
+              </label>
+              <button
+                type="button"
+                onClick={generateDescription}
+                disabled={generating}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-500/10 px-3 py-1.5 text-xs font-semibold text-indigo-400 transition hover:bg-indigo-500/20 disabled:opacity-60"
+              >
+                <FiZap size={12} />
+                {generating ? "Generating..." : "Generate with AI"}
+              </button>
+            </div>
             <textarea
               rows="4"
               name="description"
